@@ -1,36 +1,138 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bienvenue</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Contrôle d'accès horaire</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600&display=swap');
-
-    body {
-      margin: 0;
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-family: 'Poppins', sans-serif;
-      background: linear-gradient(135deg, #4facfe, #00f2fe);
-      color: white;
-      text-align: center;
+    :root{
+      --bg:#f3f4f6;
+      --card:#ffffff;
+      --ok:#0b7a3f;
+      --bad:#b02a37;
+      --muted:#6b7280;
+      font-family: Inter, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial;
     }
-
-    h1 {
-      font-size: 3em;
-      animation: fadeIn 2s ease-in-out;
+    html,body{height:100%;margin:0;background:var(--bg);display:grid;place-items:center}
+    .wrap{
+      width:min(720px,94%);
+      background:var(--card);
+      padding:28px;
+      border-radius:12px;
+      box-shadow:0 6px 30px rgba(2,6,23,0.08);
+      text-align:center;
     }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: scale(0.9); }
-      to { opacity: 1; transform: scale(1); }
+    h1{margin:0 0 8px;font-size:20px}
+    p.lead{margin:0 0 18px;color:var(--muted)}
+    .status{
+      font-size:28px;
+      font-weight:700;
+      padding:20px 16px;
+      border-radius:10px;
+      display:inline-block;
+      min-width:280px;
+      letter-spacing:0.2px;
     }
+    .ok{background:rgba(11,122,63,0.08);color:var(--ok);border:1px solid rgba(11,122,63,0.12)}
+    .invalid{background:rgba(176,42,55,0.06);color:var(--bad);border:1px solid rgba(176,42,55,0.10)}
+    .hint{margin-top:14px;color:var(--muted);font-size:14px}
+    .schedule{
+      margin-top:18px;
+      font-size:14px;
+      color:var(--muted);
+      background:#fbfdff;padding:10px;border-radius:8px;border:1px dashed #e6eef8;display:inline-block;
+    }
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+    .small{font-size:13px;color:var(--muted)}
   </style>
 </head>
 <body>
-  <h1>🎉 Bravo ! Vous pouvez entrer 🚪</h1>
+  <div class="wrap" role="main" aria-live="polite">
+    <h1>Contrôle d'accès</h1>
+    <p class="lead">Entrée autorisée uniquement pendant :</p>
+
+    <div class="schedule">
+      <div><strong>Mercredi</strong> : 14h45 → 17h00</div>
+      <div><strong>Dimanche</strong> : 14h45 → 17h15</div>
+    </div>
+
+    <div id="status" class="status invalid" aria-atomic="true" style="margin-top:18px;">
+      Vérification...
+    </div>
+
+    <div class="hint" id="now">Heure actuelle : --:--:-- (jour)</div>
+
+    <footer>
+      <button id="refresh" style="margin-top:12px;padding:8px 12px;border-radius:8px;border:1px solid #dfe7f2;background:white;cursor:pointer;">
+        Rafraîchir maintenant
+      </button>
+    </footer>
+  </div>
+
+  <script>
+    function toMinutes(h, m) { return h*60 + m; }
+    const windows = [
+      { day: 3, start: toMinutes(14,45), end: toMinutes(17,0) },  // Mercredi
+      { day: 0, start: toMinutes(14,45), end: toMinutes(17,15)}   // Dimanche
+    ];
+    const dayNames = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+
+    const statusEl = document.getElementById('status');
+    const nowEl = document.getElementById('now');
+    const refreshBtn = document.getElementById('refresh');
+
+    function pad(n){ return n.toString().padStart(2,'0'); }
+
+    function isAllowed(d){
+      const day = d.getDay();
+      const minutes = d.getHours()*60 + d.getMinutes();
+      for (const w of windows){
+        if (w.day === day && minutes >= w.start && minutes <= w.end){
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function nextOpening(d){
+      for (let offset=0; offset<14; offset++){ // 2 semaines max
+        const test = new Date(d.getTime() + offset*24*60*60*1000);
+        const day = test.getDay();
+        for (const w of windows){
+          if (w.day === day){
+            const candidate = new Date(test.getFullYear(), test.getMonth(), test.getDate(),
+                                       Math.floor(w.start/60), w.start%60, 0);
+            if (candidate > d){
+              return candidate;
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    function update(){
+      const d = new Date();
+      nowEl.textContent = `Heure actuelle : ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} — ${dayNames[d.getDay()]}`;
+
+      if (isAllowed(d)){
+        statusEl.className = 'status ok';
+        statusEl.textContent = 'Vous pouvez entrer';
+      } else {
+        const next = nextOpening(d);
+        if (next){
+          statusEl.className = 'status invalid';
+          statusEl.textContent = `Carte invalide — ouvre à ${dayNames[next.getDay()]} ${pad(next.getHours())}h${pad(next.getMinutes())}`;
+        } else {
+          statusEl.className = 'status invalid';
+          statusEl.textContent = 'Carte invalide — pas de prochaine ouverture trouvée';
+        }
+      }
+    }
+
+    update();
+    setInterval(update,1000);
+    refreshBtn.addEventListener('click', update);
+  </script>
 </body>
 </html>
